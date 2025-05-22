@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tra Cứu Giá Đất - Uông Bí</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+            line-height: 1.6;
+        }
+        h1 {
+            text-align: center;
+            color: #0056b3;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+        .search-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap; /* Cho phép các mục xuống dòng trên màn hình nhỏ */
+        }
+        label {
+            font-weight: bold;
+            min-width: 90px; /* Đảm bảo căn chỉnh tốt hơn */
+        }
+        #searchInput {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            max-width: 500px; /* Giới hạn độ rộng input */
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #micButton {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #007bff; /* Màu mặc định của icon mic */
+            font-size: 24px; /* Kích thước icon */
+            transition: color 0.3s ease;
+        }
+        #micButton:hover {
+            color: #0056b3;
+        }
+        #micButton.listening {
+            color: red; /* Màu đỏ khi đang nghe */
+        }
+        #mapid {
+            height: 600px;
+            width: 100%;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        #results-container {
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        #priceResult {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #e9f7ef;
+            border: 1px solid #d4edda;
+            border-radius: 5px;
+            color: #28a745;
+            font-weight: bold;
+            text-align: left;
+            max-height: 300px; /* Giới hạn chiều cao và thêm cuộn nếu cần */
+            overflow-y: auto;
+        }
+        .no-data {
+            color: #dc3545;
+        }
+        .info-message {
+            color: #007bff;
+            font-style: italic;
+        }
+        ul {
+            list-style: none; /* Bỏ dấu chấm đầu dòng */
+            padding: 0;
+            margin: 0;
+        }
+        li {
+            margin-bottom: 8px;
+            border-bottom: 1px dashed #e0e0e0; /* Dấu gạch ngang phân cách */
+            padding-bottom: 8px;
+        }
+        li:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Tra Cứu Giá Đất</h1>
+
+    <div class="search-container">
+        <label for="searchInput">Nhập địa điểm:</label>
+        <input type="text" id="searchInput" placeholder="Ví dụ: Lê Thánh Tông, Uông Bí, Hồng Gai...">
+        <button onclick="searchLocationAndPrice()">Tìm kiếm</button>
+        <button id="micButton" title="Nhập bằng giọng nói">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.2-3c0 3.53-2.9 6.43-6.4 6.43S4.4 14.53 4.4 11H2.7c0 3.98 3.03 7.26 6.9 7.73V22h4.8v-3.27c3.86-.47 6.9-3.75 6.9-7.73h-1.7z"/>
+            </svg>
+        </button>
+    </div>
+
+    <div id="mapid"></div>
+
+    <div id="results-container">
+        <h2>Kết quả Tra Cứu:</h2>
+        <div id="priceResult">
+            <p>Nhập địa điểm vào ô tìm kiếm để xem thông tin giá đất và vị trí trên bản đồ.</p>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/string-similarity/dist/string-similarity.min.js"></script>
+
+    <script>
+        // Khởi tạo bản đồ Leaflet, đặt trung tâm ban đầu ở Uông Bí, Quảng Ninh
+        var mymap = L.map('mapid').setView([21.0343, 106.7706], 13); 
+
+        // Thêm lớp bản đồ OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(mymap);
+
+        let currentSearchMarker = null; // Biến để lưu marker hiện tại trên bản đồ
+        let landPricesData = []; // Mảng để lưu dữ liệu giá đất từ CSV
+
+        // =========================================================
+        // START: CODE NHẬP BẰNG GIỌNG NÓI
+        // =========================================================
+        const searchInput = document.getElementById('searchInput');
+        const micButton = document.getElementById('micButton');
+        const priceResultDiv = document.getElementById('priceResult');
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+        let isListening = false;
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = false; // Ngừng nghe sau khi phát hiện một câu nói
+            recognition.interimResults = false; // Chỉ trả về kết quả cuối cùng
+            recognition.lang = 'vi-VN'; // Ngôn ngữ nhận dạng (Tiếng Việt)
+
+            recognition.onstart = () => {
+                console.log('Bắt đầu lắng nghe...');
+                isListening = true;
+                micButton.classList.add('listening'); // Thêm class để thay đổi màu mic
+                micButton.title = 'Đang lắng nghe... Nhấn để dừng';
+                priceResultDiv.innerHTML = '<p class="info-message">Đang lắng nghe giọng nói của bạn...</p>';
+            };
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                console.log('Bạn đã nói:', transcript);
+                searchInput.value = transcript;
+                priceResultDiv.innerHTML = '<p class="info-message">Đã nhận dạng: **"' + transcript + '"**. Nhấn "Tìm kiếm" để tra cứu.</p>';
+                micButton.classList.remove('listening'); // Bỏ class đổi màu
+                micButton.title = 'Nhập bằng giọng nói';
+                isListening = false;
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Lỗi nhận dạng giọng nói:', event.error);
+                priceResultDiv.innerHTML = '<p class="no-data">Lỗi nhận dạng giọng nói: ' + event.error + '</p>';
+                micButton.classList.remove('listening'); // Bỏ class đổi màu
+                micButton.title = 'Nhập bằng giọng nói';
+                isListening = false;
+                // Xử lý lỗi cụ thể (ví dụ: 'not-allowed' nếu người dùng từ chối quyền truy cập mic)
+                if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+                    priceResultDiv.innerHTML = '<p class="no-data">**Vui lòng cho phép trình duyệt truy cập micro để sử dụng tính năng này.**</p>';
+                } else if (event.error === 'no-speech') {
+                    priceResultDiv.innerHTML = '<p class="no-data">Không nhận dạng được giọng nói. Vui lòng thử lại.</p>';
+                }
+            };
+
+            recognition.onend = () => {
+                console.log('Kết thúc lắng nghe.');
+                isListening = false;
+                micButton.classList.remove('listening'); // Bỏ class đổi màu
+                micButton.title = 'Nhập bằng giọng nói';
+                // Nếu không có kết quả nào được nhận dạng sau khi kết thúc, và không có lỗi cụ thể.
+                // Tránh ghi đè thông báo lỗi nếu đã có lỗi.
+                if (searchInput.value === '' && priceResultDiv.innerHTML.includes("Đang lắng nghe") && !priceResultDiv.innerHTML.includes("Lỗi")) {
+                    priceResultDiv.innerHTML = '<p class="no-data">Không nhận dạng được giọng nói.</p>';
+                }
+            };
+
+            micButton.addEventListener('click', () => {
+                if (isListening) {
+                    recognition.stop(); // Dừng lắng nghe nếu đang nghe
+                } else {
+                    searchInput.value = ''; // Xóa nội dung cũ trong input
+                    recognition.start(); // Bắt đầu lắng nghe
+                }
+            });
+        } else {
+            micButton.disabled = true;
+            micButton.title = 'Trình duyệt của bạn không hỗ trợ nhận dạng giọng nói.';
+            priceResultDiv.innerHTML = '<p class="no-data">Trình duyệt này không hỗ trợ nhận dạng giọng nói. Vui lòng sử dụng Chrome trên Android/PC hoặc Safari trên iOS.</p>';
+        }
+        // =========================================================
+        // END: CODE NHẬP BẰNG GIỌNG NÓI
+        // =========================================================
+
+        // Hàm tải và phân tích CSV từ file 'giadat.csv'
+        async function loadCSVData(filePath) {
+            try {
+                const response = await fetch(filePath);
+                if (!response.ok) {
+                    throw new Error(`Không thể tải file CSV: ${response.statusText}`);
+                }
+                const csvText = await response.text();
+                landPricesData = parseCSV(csvText);
+                console.log("Đã tải và phân tích dữ liệu CSV:", landPricesData.length, "địa điểm.");
+            } catch (error) {
+                console.error("Lỗi khi tải hoặc phân tích CSV:", error);
+                priceResultDiv.innerHTML = `<p class="no-data">Lỗi: Không thể tải dữ liệu giá đất từ CSV. Vui lòng kiểm tra file 'giadat.csv' và quyền truy cập.</p>`;
+            }
+        }
+
+        // Hàm phân tích chuỗi CSV thành mảng các đối tượng JSON
+        function parseCSV(text) {
+            const lines = text.trim().split('\n');
+            const headers = lines[0].split(',').map(header => header.trim());
+            const data = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+
+                // Regex để tách các giá trị, bao gồm cả những giá trị có dấu phẩy bên trong dấu ngoặc kép
+                const values = [];
+                let inQuote = false;
+                let currentVal = '';
+                for (let j = 0; j < line.length; j++) {
+                    const char = line[j];
+                    if (char === '"') {
+                        inQuote = !inQuote;
+                    } else if (char === ',' && !inQuote) {
+                        values.push(currentVal.trim());
+                        currentVal = '';
+                    } else {
+                        currentVal += char;
+                    }
+                }
+                values.push(currentVal.trim()); // Thêm giá trị cuối cùng
+
+                if (values.length === headers.length) {
+                    const row = {};
+                    headers.forEach((header, index) => {
+                        let value = values[index];
+                        // Chuyển đổi các cột giá trị số (VT1000, VT2, ...) sang kiểu số nguyên
+                        if (header.startsWith('VT') && value) {
+                            row[header] = parseInt(value.replace(/\D/g, '')); 
+                        } else {
+                            row[header] = value;
+                        }
+                    });
+                    data.push(row);
+                } else {
+                    console.warn(`Dòng CSV không hợp lệ (số lượng cột không khớp): ${line}`);
+                }
+            }
+            return data;
+        }
+
+        // Hàm chính để tìm kiếm địa điểm và giá đất
+        async function searchLocationAndPrice() {
+            var searchText = document.getElementById('searchInput').value.trim();
+            var priceResultDiv = document.getElementById('priceResult');
+            priceResultDiv.innerHTML = '<p class="info-message">Đang tìm kiếm...</p>'; 
+
+            if (!searchText) {
+                priceResultDiv.innerHTML = '<p class="no-data">Vui lòng nhập từ khóa tìm kiếm.</p>';
+                return;
+            }
+            
+            // Xóa marker cũ nếu có và đóng popup
+            if (currentSearchMarker) {
+                mymap.removeLayer(currentSearchMarker);
+                currentSearchMarker = null;
+            }
+            mymap.closePopup(); 
+
+            // Chuẩn hóa từ khóa tìm kiếm (bỏ dấu, chuyển sang chữ thường)
+            const normalizedSearchText = searchText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+            // 1. Tìm kiếm giá đất trong dữ liệu CSV đã tải
+            let bestMatch = null;
+            let highestSimilarity = 0;
+            const SIMILARITY_THRESHOLD = 0.4; // Ngưỡng điểm tương đồng (0.0 đến 1.0)
+
+            landPricesData.forEach(item => {
+                // Tạo một chuỗi địa chỉ đầy đủ từ dữ liệu CSV để so sánh
+                // Sử dụng các tên cột từ file CSV của bạn: Quận/Huyện, Tên đường/Làng xã, Đoạn:, Đến
+                const csvAddressString = `${item['Quận/Huyện'] || ''}, ${item['Tên đường/Làng xã'] || ''}, ${item['Đoạn:'] || ''}, ${item['Đến'] || ''}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                
+                // Sử dụng thư viện string-similarity để tính điểm tương đồng
+                const similarity = stringSimilarity.compareTwoStrings(normalizedSearchText, csvAddressString);
+
+                if (similarity > highestSimilarity && similarity >= SIMILARITY_THRESHOLD) {
+                    highestSimilarity = similarity;
+                    bestMatch = item;
+                }
+            });
+
+            // 2. Tìm kiếm tọa độ trên bản đồ bằng Nominatim API của OpenStreetMap
+            // Thêm "Uông Bí, Quảng Ninh, Việt Nam" vào cuối để giới hạn tìm kiếm trong khu vực
+            var nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchText + ', Uông Bí, Quảng Ninh, Việt Nam')}&format=json&limit=1&viewbox=106.5,20.8,107.5,21.5&bounded=1&_=${new Date().getTime()}`;
+            let lat, lon, display_name;
+            let nominatimError = false;
+
+            try {
+                const response = await fetch(nominatimUrl, {
+                    headers: {
+                        'User-Agent': 'VietinbankLandPriceApp/1.0' // Yêu cầu user-agent thân thiện cho Nominatim
+                    }
+                });
+                const data = await response.json();
+
+                if (data && data.length > 0) {
+                    lat = parseFloat(data[0].lat);
+                    lon = parseFloat(data[0].lon);
+                    display_name = data[0].display_name;
+                } else {
+                    nominatimError = true;
+                }
+            } catch (error) {
+                console.error('Lỗi khi tìm kiếm địa điểm Nominatim:', error);
+                nominatimError = true;
+            }
+
+            // 3. Hiển thị kết quả trong giao diện
+            let resultHtml = '';
+            resultHtml += `<h3>Thông tin tra cứu:</h3>`;
+            resultHtml += `<p><strong>Địa chỉ tìm kiếm:</strong> ${searchText}</p>`;
+
+            // Hiển thị thông tin bản đồ
+            if (lat && lon) {
+                mymap.setView([lat, lon], 15); // Di chuyển bản đồ đến vị trí tìm thấy
+                currentSearchMarker = L.marker([lat, lon]).addTo(mymap)
+                    .bindPopup(`<b>${display_name}</b><br>Tọa độ: ${lat.toFixed(4)}, ${lon.toFixed(4)}`).openPopup();
+                resultHtml += `<p><strong>Vị trí trên bản đồ:</strong> ${display_name} (Tọa độ: ${lat.toFixed(4)}, ${lon.toFixed(4)})</p>`;
+            } else {
+                resultHtml += `<p class="no-data">Không tìm thấy vị trí trên bản đồ cho: "${searchText}".</p>`;
+                if (nominatimError) {
+                    resultHtml += `<p class="no-data">Có thể do lỗi mạng, giới hạn Nominatim hoặc không tìm thấy kết quả phù hợp.</p>`;
+                }
+            }
+
+            // Hiển thị thông tin giá đất từ CSV
+            if (bestMatch) {
+                const formatCurrency = (amount) => {
+                    if (amount && !isNaN(amount)) {
+                        return amount.toLocaleString('vi-VN') + ' VNĐ/m²';
+                    }
+                    return 'Không xác định';
+                };
+
+                resultHtml += `<p class="price-found"><strong>Kết quả giá đất phù hợp nhất (độ khớp ${Math.round(highestSimilarity * 100)}%):</strong></p>`;
+                resultHtml += `<ul>`;
+                resultHtml += `<li><strong>Quận/Huyện:</strong> ${bestMatch['Quận/Huyện'] || 'N/A'}</li>`;
+                resultHtml += `<li><strong>Tên đường/Làng xã:</strong> ${bestMatch['Tên đường/Làng xã'] || 'N/A'}</li>`;
+                resultHtml += `<li><strong>Đoạn/Mô tả:</strong> ${bestMatch['Đoạn:'] || 'N/A'}</li>`;
+                resultHtml += `<li><strong>Loại đất:</strong> ${bestMatch.Loại || 'N/A'}</li>`;
+                
+                // Hiển thị tất cả các mức giá VT nếu có
+                if (bestMatch.VT1000) resultHtml += `<li><strong>Giá VT1000:</strong> ${formatCurrency(bestMatch.VT1000)}</li>`;
+                if (bestMatch.VT2) resultHtml += `<li><strong>Giá VT2:</strong> ${formatCurrency(bestMatch.VT2)}</li>`;
+                if (bestMatch.VT3) resultHtml += `<li><strong>Giá VT3:</strong> ${formatCurrency(bestMatch.VT3)}</li>`;
+                if (bestMatch.VT4) resultHtml += `<li><strong>Giá VT4:</strong> ${formatCurrency(bestMatch.VT4)}</li>`;
+                if (bestMatch.VT5) resultHtml += `<li><strong>Giá VT5:</strong> ${formatCurrency(bestMatch.VT5)}</li>`;
+                
+                resultHtml += `<li><strong>Ghi chú thêm:</strong> ${bestMatch.Đến || 'N/A'}</li>`; // Cột "Đến" có thể dùng làm ghi chú
+                resultHtml += `</ul>`;
+            } else {
+                resultHtml += `<p class="no-data">Không tìm thấy thông tin giá đất nào phù hợp với từ khóa: "${searchText}" trong dữ liệu CSV.</p>`;
+                resultHtml += `<p class="info-message">Hãy thử nhập các từ khóa như "Uông Bí", "Hồng Gai", "Lê Thánh Tông" để có kết quả tốt hơn.</p>`;
+            }
+            priceResultDiv.innerHTML = resultHtml;
+        }
+
+        // Tải dữ liệu CSV khi trang tải xong
+        window.addEventListener('load', () => {
+            loadCSVData('giadat.csv'); // Tên file CSV của bạn
+        });
+    </script>
+</body>
+</html>
