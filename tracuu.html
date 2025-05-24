@@ -406,7 +406,7 @@
             }
 
             landPricesData.forEach(item => {
-                const csvAddressString = `${item['Quận/Huyện'] || ''} ${item['Tên đường/Làng xã'] || ''} ${item['Đoạn:'] || ''} ${item['Đến'] || ''}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim();
+                const csvAddressString = `${item['Tên đường/Làng xã'] || ''} ${item['Đoạn:'] || ''} ${item['Đến'] || ''} ${item['Quận/Huyện'] || ''}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim();
                 
                 const similarity = stringSimilarity.compareTwoStrings(normalizedSearchText, csvAddressString);
 
