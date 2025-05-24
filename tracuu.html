@@ -197,27 +197,37 @@
 </head>
 <body>
     <div class="container">
-        <h1>Tra Cứu Giá Đất Uông Bí</h1>
+        <header>
+            <h1>Tra Cứu Giá Đất Uông Bí</h1>
+        </header>
 
-        <div class="search-container">
-            <label for="searchInput">Nhập địa điểm:</label>
-            <input type="text" id="searchInput" placeholder="Ví dụ: Lê Thánh Tông, Uông Bí, Hồng Gai...">
-            <button onclick="searchLocationAndPrice()">Tìm kiếm</button>
-            <button id="micButton" title="Nhập bằng giọng nói">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.2-3c0 3.53-2.9 6.43-6.4 6.43S4.4 14.53 4.4 11H2.7c0 3.98 3.03 7.26 6.9 7.73V22h4.8v-3.27c3.86-.47 6.9-3.75 6.9-7.73h-1.7z"/>
-                </svg>
-            </button>
-        </div>
+        <main>
+            <section class="search-section">
+                <div class="search-container">
+                    <label for="searchInput">Nhập địa điểm:</label>
+                    <input type="text" id="searchInput" placeholder="Ví dụ: Lê Thánh Tông, Uông Bí, Hồng Gai...">
+                    <button onclick="searchLocationAndPrice()">Tìm kiếm</button>
+                    <button id="micButton" title="Nhập bằng giọng nói">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.2-3c0 3.53-2.9 6.43-6.4 6.43S4.4 14.53 4.4 11H2.7c0 3.98 3.03 7.26 6.9 7.73V22h4.8v-3.27c3.86-.47 6.9-3.75 6.9-7.73h-1.7z"/>
+                        </svg>
+                    </button>
+                </div>
+            </section>
 
-        <div id="mapid"></div>
+            <section class="map-section">
+                <div id="mapid"></div>
+            </section>
 
-        <div id="results-container">
-            <h2>Kết quả Tra Cứu:</h2>
-            <div id="priceResult">
-                <p>Nhập địa điểm vào ô tìm kiếm hoặc sử dụng biểu tượng micro để tra cứu thông tin giá đất và vị trí trên bản đồ.</p>
-            </div>
-        </div>
+            <section class="results-section">
+                <div id="results-container">
+                    <h2>Kết quả Tra Cứu:</h2>
+                    <div id="priceResult">
+                        <p>Nhập địa điểm vào ô tìm kiếm hoặc sử dụng biểu tượng micro để tra cứu thông tin giá đất và vị trí trên bản đồ.</p>
+                    </div>
+                </div>
+            </section>
+        </main>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
@@ -395,10 +405,11 @@
             mymap.closePopup();
 
             const normalizedSearchText = searchText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const searchWords = normalizedSearchText.split(/\s+/).filter(word => word.length > 0);
 
             let bestMatch = null;
-            let highestSimilarity = 0;
-            const SIMILARITY_THRESHOLD = 0.5;
+            let highestScore = 0; // Thay vì highestSimilarity, dùng highestScore để tính tổng điểm
+            const WORD_SIMILARITY_THRESHOLD = 0.7; // Ngưỡng độ tương đồng cho từng từ
 
             if (landPricesData.length === 0) {
                 priceResultDiv.innerHTML = `<p class="no-data">Chưa có dữ liệu giá đất để tra cứu. Vui lòng kiểm tra file 'giadat.csv'.</p>`;
@@ -406,15 +417,81 @@
             }
 
             landPricesData.forEach(item => {
-                const csvAddressString = `${item['Tên đường/Làng xã'] || ''} ${item['Đoạn:'] || ''} ${item['Đến'] || ''} ${item['Quận/Huyện'] || ''}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim();
-                
-                const similarity = stringSimilarity.compareTwoStrings(normalizedSearchText, csvAddressString);
+                // Kết hợp các trường liên quan đến địa chỉ để tạo chuỗi so sánh
+                const csvAddressString = `${item['Tên đường/Làng xã'] || ''} ${item['Đoạn:'] || ''} ${item['Đến'] || ''} ${item['Quận/Huyện'] || ''} ${item['Loại'] || ''}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim();
+                const csvWords = csvAddressString.split(/\s+/).filter(word => word.length > 0);
 
-                if (similarity > highestSimilarity && similarity >= SIMILARITY_THRESHOLD) {
-                    highestSimilarity = similarity;
+                let currentScore = 0;
+                let matchedWordsCount = 0;
+
+                // Cải thiện logic tìm kiếm: Kiểm tra từng từ trong searchWords
+                searchWords.forEach(sWord => {
+                    let maxWordSim = 0;
+                    csvWords.forEach(cWord => {
+                        const sim = stringSimilarity.compareTwoStrings(sWord, cWord);
+                        if (sim > maxWordSim) {
+                            maxWordSim = sim;
+                        }
+                    });
+
+                    // Nếu từ tìm kiếm có độ tương đồng đủ cao với bất kỳ từ nào trong CSV, cộng điểm
+                    if (maxWordSim >= WORD_SIMILARITY_THRESHOLD) {
+                        currentScore += maxWordSim; // Cộng độ tương đồng của từ
+                        matchedWordsCount++;
+                    }
+                });
+
+                // Ưu tiên các kết quả mà chuỗi tìm kiếm là một phần chính xác (substring) của chuỗi CSV
+                if (csvAddressString.includes(normalizedSearchText)) {
+                    currentScore += 1.0; // Cộng thêm điểm đáng kể nếu có khớp chuỗi con chính xác
+                }
+                
+                // Cân nhắc thêm độ tương đồng tổng thể của chuỗi để tăng trọng số cho các kết quả khớp chặt chẽ
+                currentScore += stringSimilarity.compareTwoStrings(normalizedSearchText, csvAddressString) * 0.8; 
+
+                // Tính điểm tổng (có thể điều chỉnh công thức tùy ý)
+                // Ví dụ: Trung bình điểm tương đồng của các từ khớp + điểm khớp substring/tổng thể
+                if (matchedWordsCount > 0) {
+                     // Lấy trung bình điểm của các từ khớp sau đó cộng thêm điểm khớp toàn bộ chuỗi
+                    currentScore = (currentScore / matchedWordsCount) + stringSimilarity.compareTwoStrings(normalizedSearchText, csvAddressString);
+                } else {
+                    currentScore = stringSimilarity.compareTwoStrings(normalizedSearchText, csvAddressString); // Chỉ dựa vào độ tương đồng toàn chuỗi nếu không có từ nào khớp đủ ngưỡng
+                }
+                
+                // Điều chỉnh trọng số của `currentScore` nếu bạn muốn các kết quả khớp chặt chẽ hơn có điểm cao hơn rõ rệt
+                // Ví dụ: currentScore = (điểm từ + điểm substring + điểm tổng thể)
+                // Sau đó chuẩn hóa lại về 0-1 để phù hợp với hiển thị %
+                
+                if (currentScore > highestScore) {
+                    highestScore = currentScore;
                     bestMatch = item;
                 }
             });
+
+            // Sau khi vòng lặp kết thúc, hãy kiểm tra ngưỡng cuối cùng cho bestMatch
+            // Ngưỡng này cần được điều chỉnh dựa trên công thức tính highestScore của bạn
+            // và kết quả thực tế khi chạy thử.
+            // Ví dụ: Nếu highestScore có thể lên đến 3.0, thì ngưỡng 0.5 là quá thấp.
+            // Cần chuẩn hóa highestScore về 0-1 trước khi so sánh với ngưỡng.
+            // Hoặc, bạn có thể thiết lập ngưỡng dựa trên giá trị highestScore mong đợi.
+            // Ví dụ:
+            const MAX_POSSIBLE_SCORE = 3.0; // Ước tính điểm tối đa có thể đạt được với công thức của bạn
+            let displaySimilarity = 0;
+
+            if (bestMatch) {
+                // Tính lại độ tương đồng để hiển thị, chuẩn hóa về 0-100%
+                // Dùng lại logic so sánh chuỗi tổng thể cho phần hiển thị
+                const bestMatchAddressString = `${bestMatch['Tên đường/Làng xã'] || ''} ${bestMatch['Đoạn:'] || ''} ${bestMatch['Đến'] || ''} ${bestMatch['Quận/Huyện'] || ''} ${bestMatch['Loại'] || ''}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim();
+                displaySimilarity = stringSimilarity.compareTwoStrings(normalizedSearchText, bestMatchAddressString);
+
+                // Cần một ngưỡng quyết định cuối cùng liệu bestMatch có thực sự đủ tốt không
+                // Đặt ngưỡng này dựa trên `displaySimilarity` hoặc một `highestScore` đã chuẩn hóa
+                const FINAL_DISPLAY_THRESHOLD = 0.2; // Ví dụ, cần ít nhất 20% khớp tổng thể
+                if (displaySimilarity < FINAL_DISPLAY_THRESHOLD) {
+                    bestMatch = null; // Nếu độ khớp tổng thể quá thấp, coi như không tìm thấy
+                }
+            }
+
 
             const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchText + ', Uông Bí, Quảng Ninh, Việt Nam')}&format=json&limit=1&viewbox=106.5,20.8,107.5,21.5&bounded=1&_=${new Date().getTime()}`;
             let lat, lon, display_name;
@@ -464,7 +541,8 @@
                     return 'Không xác định';
                 };
 
-                resultHtml += `<p class="price-found"><strong>Kết quả giá đất phù hợp nhất (độ khớp ${Math.round(highestSimilarity * 100)}%):</strong></p>`;
+                // Hiển thị độ khớp dựa trên `displaySimilarity` đã tính toán
+                resultHtml += `<p class="price-found"><strong>Kết quả giá đất phù hợp nhất (độ khớp ${Math.round(displaySimilarity * 100)}%):</strong></p>`;
                 resultHtml += `<ul>`;
                 resultHtml += `<li><strong>Quận/Huyện:</strong> ${bestMatch['Quận/Huyện'] || 'N/A'}</li>`;
                 resultHtml += `<li><strong>Tên đường/Làng xã:</strong> ${bestMatch['Tên đường/Làng xã'] || 'N/A'}</li>`;
